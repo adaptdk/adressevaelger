@@ -1,12 +1,14 @@
 import { AdresseSearchAPI } from "./api.js";
 
+// Minimum number of characters before an address search is triggered
+const MIN_SEARCH_LENGTH = 2;
+
 export function adressevaelger(element, options) {
-  const adressevaelgerui = new AdresseSearchUI(element, options);
+  new AdresseSearchUI(element, options);
 }
 
 export class AdresseSearchUI {
   searchType = "adresser";
-  debounceTimer;
   options;
   wrapperElement;
   inputElement;
@@ -22,9 +24,10 @@ export class AdresseSearchUI {
     this.wrapperElement.append(this.listElement);
     this.inputElement.addEventListener("input", this.inputHandler.bind(this));
     this.wrapperElement.addEventListener(
-      "keyup",
+      "keydown",
       this.listKeyHandler.bind(this),
     );
+    this.inputElement.addEventListener("click", this.clickHandler.bind(this));
     document.addEventListener("click", this.outsideClickHandler.bind(this));
     const opt = this.options.apiUrl
       ? { token: options.token, apiUrl: this.options.apiUrl }
@@ -32,16 +35,20 @@ export class AdresseSearchUI {
     this.api = new AdresseSearchAPI(opt);
   }
 
+  // Only search once there are at least MIN_SEARCH_LENGTH characters to type
   inputHandler(event) {
-    if (event.target.value === "") {
-      return;
+    if (event.target.value.length >= MIN_SEARCH_LENGTH) {
+      this.refreshList(event.target.value);
+    } else {
+      this.listElement.querySelector("ul")?.remove();
     }
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
+  }
+
+  // Reopen the suggestion list when clicking back into a field that already has text
+  clickHandler() {
+    if (this.inputElement.value.length >= MIN_SEARCH_LENGTH) {
+      this.refreshList(this.inputElement.value);
     }
-    this.debounceTimer = setTimeout(async () => {
-      await this.refreshList(event.target.value);
-    }, 500);
   }
 
   async refreshList(queryText) {
@@ -69,6 +76,9 @@ export class AdresseSearchUI {
     });
     parentElement.querySelector("ul")?.remove();
     parentElement.append(ulEl);
+
+    // Highlight the first result so Enter/Tab can select it without arrow-keying first
+    ulEl.querySelector("li")?.classList.add("dawa-selected");
   }
 
   renderDOMListItem(parentElement, item) {
@@ -95,20 +105,26 @@ export class AdresseSearchUI {
     );
   }
 
+  // Handle keyboard interaction while the suggestion list is open
   listKeyHandler(event) {
-    if (event.key === "ArrowDown") {
-      this.moveFocus(1);
-    } else if (event.key === "ArrowUp") {
-      this.moveFocus(-1);
-    } else if (
-      event.key === "Enter" &&
-      this.listElement.querySelector(":focus")
-    ) {
-      this.inputElement.focus();
-      this.selectProcessor(JSON.parse(event.target.dataset.item));
-    } else if (event.key === "Escape") {
-      this.inputElement.focus();
-      this.listElement.querySelector("ul")?.remove();
+    const list = this.listElement.querySelector("ul");
+    const selected = this.listElement.querySelector("li.dawa-selected");
+
+    if (list) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        this.moveFocus(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        this.moveFocus(-1);
+      } else if (event.key === "Enter" || event.key === "Tab") {
+        if (selected) {
+          event.preventDefault();
+          this.selectProcessor(JSON.parse(selected.dataset.item));
+        }
+      } else if (event.key === "Escape") {
+        this.listElement.querySelector("ul")?.remove();
+      }
     }
   }
 
@@ -118,27 +134,26 @@ export class AdresseSearchUI {
     }
   }
 
+  // Move the highlighted suggestion one step up or down.
   moveFocus(direction) {
-    if (!this.listElement.querySelector("ul")) {
+    const items = [...this.listElement.querySelectorAll("li")];
+
+    if (!items.length) {
       return;
     }
-    const next = this.listElement.querySelector(":focus")?.nextElementSibling;
-    const previous =
-      this.listElement.querySelector(":focus")?.previousElementSibling;
-    const first = this.listElement.querySelector("li");
-    this.listElement.querySelectorAll("li").forEach((li) => {
-      li.classList.remove("dawa-selected");
-    });
-    if (direction === 1 && !next && !previous) {
-      first.focus();
-    } else if (direction === -1 && !previous) {
-      this.inputElement.focus();
-    } else if (direction === 1 && next) {
-      next.focus();
-    } else if (direction === -1 && previous) {
-      previous.focus();
-    }
-    this.listElement.querySelector(":focus")?.classList.add("dawa-selected");
+
+    const currentIndex = items.findIndex((item) =>
+      item.classList.contains("dawa-selected"),
+    );
+
+    const nextIndex = Math.min(
+      Math.max(currentIndex + direction, 0),
+      items.length - 1,
+    );
+
+    items[currentIndex]?.classList.remove("dawa-selected");
+    items[nextIndex].classList.add("dawa-selected");
+    items[nextIndex].scrollIntoView({ block: "nearest" });
   }
 
   selectProcessor(item) {
