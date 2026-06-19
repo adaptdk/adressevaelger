@@ -22,12 +22,18 @@ export class AdresseSearchUI {
     this.listElement = document.createElement("div");
     this.wrapperElement = this.inputElement.parentNode;
     this.wrapperElement.append(this.listElement);
-    this.inputElement.addEventListener("input", this.inputHandler.bind(this));
+    this.inputElement.addEventListener(
+      "input",
+      this.refreshFromInput.bind(this),
+    );
+    this.inputElement.addEventListener(
+      "click",
+      this.refreshFromInput.bind(this),
+    );
     this.wrapperElement.addEventListener(
       "keydown",
       this.listKeyHandler.bind(this),
     );
-    this.inputElement.addEventListener("click", this.clickHandler.bind(this));
     document.addEventListener("click", this.outsideClickHandler.bind(this));
     const opt = this.options.apiUrl
       ? { token: options.token, apiUrl: this.options.apiUrl }
@@ -35,20 +41,18 @@ export class AdresseSearchUI {
     this.api = new AdresseSearchAPI(opt);
   }
 
-  // Only search once there are at least MIN_SEARCH_LENGTH characters to type
-  inputHandler(event) {
-    if (event.target.value.length >= MIN_SEARCH_LENGTH) {
-      this.refreshList(event.target.value);
+  // Search from the input's current value once it has at least
+  // MIN_SEARCH_LENGTH characters, otherwise close the suggestion list.
+  refreshFromInput() {
+    if (this.inputElement.value.length >= MIN_SEARCH_LENGTH) {
+      this.refreshList(this.inputElement.value);
     } else {
-      this.listElement.querySelector("ul")?.remove();
+      this.closeList();
     }
   }
 
-  // Reopen the suggestion list when clicking back into a field that already has text
-  clickHandler() {
-    if (this.inputElement.value.length >= MIN_SEARCH_LENGTH) {
-      this.refreshList(this.inputElement.value);
-    }
+  closeList() {
+    this.listElement.querySelector("ul")?.remove();
   }
 
   async refreshList(queryText) {
@@ -74,7 +78,7 @@ export class AdresseSearchUI {
     items.forEach((item) => {
       this.renderDOMListItem(ulEl, item);
     });
-    parentElement.querySelector("ul")?.remove();
+    this.closeList();
     parentElement.append(ulEl);
 
     // Highlight the first result so Enter/Tab can select it without arrow-keying first
@@ -123,14 +127,14 @@ export class AdresseSearchUI {
           this.selectProcessor(JSON.parse(selected.dataset.item));
         }
       } else if (event.key === "Escape") {
-        this.listElement.querySelector("ul")?.remove();
+        this.closeList();
       }
     }
   }
 
   outsideClickHandler(event) {
     if (!this.wrapperElement.contains(event.target)) {
-      this.listElement.querySelector("ul")?.remove();
+      this.closeList();
     }
   }
 
@@ -165,7 +169,7 @@ export class AdresseSearchUI {
       this.inputElement.value = item.titel;
       this.refreshList(item.titel);
     } else {
-      this.listElement.querySelector("ul")?.remove();
+      this.closeList();
       this.selectItem(item);
     }
   }
